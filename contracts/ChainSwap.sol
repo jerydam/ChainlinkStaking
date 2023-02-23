@@ -1,36 +1,68 @@
-// SPDX-License-Identifier: UNLICENSED
+// SPDX-License-Identifier: SEE LICENSE IN LICENSE
 pragma solidity ^0.8.9;
 
-
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+// import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {IERC20} from "./IUSD.sol";
 
-contract TokenSwap {
-    using SafeERC20 for IERC20;
-    AggregatorV3Interface internal priceFeed;
+contract swapper {
 
-    address public tokenA;
-    address public tokenB;
+    address owner;
+    uint256 decimal = 1e18;
+    IERC20 public token1;
+    IERC20 public token2;
+    AggregatorV3Interface private pricefeeddai;
+    //  AggregatorV3Interface private pricefeedusd;
+    AggregatorV3Interface private pricefeedeth;
+    AggregatorV3Interface private pricefeedbat;
+    address public ethereum;
 
-    constructor(address _tokenA, address _tokenB, address _priceFeed) {
-        tokenA = _tokenA;
-        tokenB = _tokenB;
-        priceFeed = AggregatorV3Interface(_priceFeed);
+    //token1 == Dai
+    //token2 == bat
+
+     
+    constructor() {
+        owner = msg.sender;
+        pricefeeddai = AggregatorV3Interface(0x773616E4d11A78F511299002da57A0a94577F1f4);
+        pricefeedeth = AggregatorV3Interface(0x5f4eC3Df9cbd43714FE2740f5E3616155c5b8419);
+        pricefeedbat = AggregatorV3Interface(0x0d16d4528239e9ee52fa531af613AcdB23D88c94);
+        token1 = IERC20(0x6B175474E89094C44Da98b954EedeAC495271d0F);
+        token2 = IERC20(0x0D8775F648430679A709E98d2b0Cb6250d2887EF);
+        
+
     }
 
-    function getExchangeRate() public view returns (uint256) {
-        (, int256 price, , , ) = priceFeed.latestRoundData();
-        return uint256(price);
+
+
+    function getLatestPrice (AggregatorV3Interface pricefeed) public view returns (uint80 roundID, int price,
+        uint  startedAt,uint timeStamp,uint80 answeredInRound) {
+        (roundID, price,startedAt,timeStamp,answeredInRound) = pricefeed.latestRoundData();
+    } 
+
+
+    function swapBatToDai(uint256 _amounttoswap) public returns(bool swapped){
+        (, int daiPrice, , , ) = getLatestPrice(pricefeeddai);
+        (, int batPrice, , , ) = getLatestPrice(pricefeedbat);
+        uint256 batPriceInUsd = uint256(batPrice);
+        uint256 daiPriceInUsd = uint256(daiPrice);
+        uint256 daiPriceInbat = batPriceInUsd * decimal / daiPriceInUsd;
+        uint256 amountToReceive = _amounttoswap * daiPriceInbat / decimal;
+        bool success = token1.approve(address(this), _amounttoswap);
+        bool deduct = token2.transferFrom(msg.sender, address(this), _amounttoswap);
+        bool pay =  token1.transfer(msg.sender, amountToReceive);
+        require(deduct, "Transfer of token1 failed");
+        require(pay, "Transfer of token2 failed");
+        require(success, "Approval of Bat failed");
+        swapped = true;
     }
 
-    function swapTokens(uint256 amount) public {
-        uint256 rate = getExchangeRate();
+    receive() external payable{
 
-        uint256 amount2 = amount * rate;
-
-        IERC20(tokenA).safeTransferFrom(msg.sender, address(this), amount);
-
-        IERC20(tokenB).safeTransfer(msg.sender, amount2);
     }
+
+    fallback() external{
+
+    }
+   
+
 }
